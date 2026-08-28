@@ -3,10 +3,35 @@ MIN_BRIGHTNESS = 40
 MAX_BRIGHTNESS = 220
 
 OCR_CONFIDENCE_WARNING_THRESHOLD = 60
+MIN_OCR_MEAN_CONFIDENCE = 30.0
 
 OCR_LANGUAGES = "rus+eng"
 
-REQUIRED_FIELDS = ["last_name", "first_name", "birth_date", "document_number"]
+TD3_LINE_LENGTH = 44
+MRZ_CROP_RATIO = 0.20
+
+REQUIRED_FIELDS = [
+    "last_name",
+    "first_name",
+    "birth_date",
+    "document_number",
+]
+
+ALL_PASSPORT_FIELDS = [
+    "last_name",
+    "first_name",
+    "middle_name",
+    "birth_date",
+    "document_number",
+    "personal_number",
+    "issue_date",
+    "expiry_date",
+    "issued_by",
+    "nationality",
+    "sex",
+    "birth_place",
+    "citizenship",
+]
 
 DATE_FIELDS = {"birth_date", "issue_date", "expiry_date"}
 

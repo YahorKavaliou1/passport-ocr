@@ -1,5 +1,8 @@
 from passport_ocr.extraction.field_extractor import extract_fields
 from passport_ocr.extraction.mrz_parser import parse_mrz
+from passport_ocr.exceptions import (
+    ImageLoadError, ImageQualityError, OCRFailureError, PassportOCRError
+)
 from passport_ocr.models import RecognitionResult
 from passport_ocr.ocr.tesseract_engine import TesseractOCREngine
 from passport_ocr.preprocessing import deskew, image_ops
@@ -21,16 +24,58 @@ class PassportOCRPipeline:
             image = image_ops.denoise(image)
             image = deskew.deskew(image)
             image = image_ops.enhance_contrast(image)
+
             mrz_image = image
+
             image = image_ops.binarize(image)
             image = image_ops.resize_for_ocr(image)
 
             ocr_result = self.ocr_engine.recognize(image)
-            mrz_result = parse_mrz(mrz_image, self.ocr_engine, ocr_result.full_text)
-            data = extract_fields(ocr_result.full_text, mrz_result)
+            mrz_result = parse_mrz(
+                mrz_image, self.ocr_engine, ocr_result.full_text
+            )
+            extraction = extract_fields(ocr_result.full_text, mrz_result)
 
-            return build_result(data, ocr_result, mrz_result)
+            return build_result(
+                extraction.data, ocr_result, mrz_result, extraction.warnings
+            )
+
+        except ImageLoadError:
+            return RecognitionResult(
+                success=False,
+                document_type="unknown",
+                data=None,
+                warnings=["The document could not be recognized"],
+            )
+
+        except ImageQualityError as exc:
+            return RecognitionResult(
+                success=False,
+                document_type="unknown",
+                data=None,
+                warnings=[str(exc)],
+            )
+
+        except OCRFailureError:
+            return RecognitionResult(
+                success=False,
+                document_type="unknown",
+                data=None,
+                warnings=["OCR could not recognize the text"],
+            )
+
+        except PassportOCRError as exc:
+            return RecognitionResult(
+                success=False,
+                document_type="unknown",
+                data=None,
+                warnings=[str(exc)],
+            )
 
         except Exception:
-            # TODO: make correct handling
-            raise
+            return RecognitionResult(
+                success=False,
+                document_type="unknown",
+                data=None,
+                warnings=["The document could not be recognized"],
+            )

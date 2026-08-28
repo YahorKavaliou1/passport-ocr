@@ -12,3 +12,11 @@ class ImageQualityError(PassportOCRError):
 
 class OCRFailureError(PassportOCRError):
     pass
+
+
+class MRZValidationError(PassportOCRError):
+    pass
+
+
+class NonPassportDocumentError(PassportOCRError):
+    pass
