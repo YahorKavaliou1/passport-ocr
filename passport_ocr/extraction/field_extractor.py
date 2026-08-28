@@ -1,6 +1,5 @@
 import re
 from dataclasses import dataclass, field
-from datetime import datetime
 
 from passport_ocr.config import (
     DATE_FIELDS, FIELD_PATTERNS, MRZ_PRIORITY_FIELDS, VISUAL_ONLY_FIELDS
@@ -36,11 +35,17 @@ def extract_fields(
         visual_value = visual_fields.get(field_name)
 
         if mrz_result and mrz_result.is_valid and mrz_value is not None:
-            extracted[field_name] = mrz_value
-            if visual_value and not _values_equal(mrz_value, visual_value, field_name):
+            if visual_value and _is_ocr_garbled(mrz_value, visual_value, field_name):
+                extracted[field_name] = visual_value
                 warnings.append(
-                    f"Conflict between MRZ and visual text for '{field_name}'; MRZ value used"
+                    f"MRZ value for '{field_name}' looked unreliable; visual value used"
                 )
+            else:
+                extracted[field_name] = mrz_value
+                if visual_value and not _values_equal(mrz_value, visual_value, field_name):
+                    warnings.append(
+                        f"Conflict between MRZ and visual text for '{field_name}'; MRZ value used"
+                    )
             continue
 
         if visual_value is not None:
@@ -65,11 +70,11 @@ def _extract_visual_fields(full_text: str, warnings: list[str]) -> dict[str, str
     results: dict[str, str] = {}
 
     for field_name, pattern in FIELD_PATTERNS.items():
-        match = re.search(pattern, full_text, re.IGNORECASE | re.MULTILINE)
+        match = re.search(pattern, full_text, re.IGNORECASE | re.MULTILINE | re.DOTALL)
         if not match:
             continue
 
-        raw_value = _clean_text(match.group(1))
+        raw_value = _clean_text(_first_captured_group(match))
         if not raw_value:
             continue
 
@@ -89,6 +94,9 @@ def _extract_visual_fields(full_text: str, warnings: list[str]) -> dict[str, str
                 warnings.append(f"Invalid sex value: {raw_value}")
             continue
 
+        if field_name == "nationality" and len(raw_value) != 3:
+            continue
+
         results[field_name] = raw_value
 
     return results
@@ -103,12 +111,17 @@ def _get_mrz_value(
 
 
 def _parse_visual_date(raw_value: str) -> tuple[str | None, str | None]:
-    try:
-        parsed = datetime.strptime(raw_value.strip(), "%d.%m.%Y")
-    except ValueError:
+    normalized = re.sub(r"[\s./-]+", " ", raw_value.strip())
+    parts = normalized.split()
+
+    if len(parts) != 3 or not all(part.isdigit() for part in parts):
         return None, f"Invalid date format: {raw_value}"
 
-    return parsed.strftime("%Y-%m-%d"), None
+    day, month, year = (int(part) for part in parts)
+    if not (1 <= day <= 31 and 1 <= month <= 12):
+        return None, f"Invalid date format: {raw_value}"
+
+    return f"{year:04d}-{month:02d}-{day:02d}", None
 
 
 def _normalize_sex(raw_value: str) -> str | None:
@@ -126,6 +139,13 @@ def _clean_text(value: str) -> str:
     return re.sub(r"\s+", " ", value).strip()
 
 
+def _first_captured_group(match: re.Match[str]) -> str:
+    for group in match.groups():
+        if group:
+            return group
+    return ""
+
+
 def _values_equal(left: str, right: str, field_name: str) -> bool:
     if field_name in {"last_name", "first_name", "middle_name", "issued_by", "birth_place", "citizenship"}:
         return _clean_text(left).upper() == _clean_text(right).upper()
@@ -134,3 +154,17 @@ def _values_equal(left: str, right: str, field_name: str) -> bool:
         return left.replace(" ", "").upper() == right.replace(" ", "").upper()
 
     return left == right
+
+
+def _is_ocr_garbled(mrz_value: str, visual_value: str, field_name: str) -> bool:
+    if field_name not in {"last_name", "first_name"}:
+        return False
+
+    mrz_clean = re.sub(r"[^A-Z]", "", mrz_value.upper())
+    visual_clean = re.sub(r"[^A-Z]", "", visual_value.upper())
+    if not mrz_clean or not visual_clean:
+        return False
+
+    common = sum(1 for left, right in zip(mrz_clean, visual_clean) if left == right)
+    similarity = common / max(len(mrz_clean), len(visual_clean))
+    return similarity < 0.7

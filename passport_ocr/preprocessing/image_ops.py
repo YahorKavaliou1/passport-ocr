@@ -1,6 +1,12 @@
 import cv2
 import numpy as np
 
+from passport_ocr.config import (
+    DATA_PAGE_ASPECT_THRESHOLD,
+    DATA_PAGE_CROP_RATIO,
+    DATA_PAGE_MIN_HEIGHT,
+)
+
 
 def to_grayscale(image: np.ndarray) -> np.ndarray:
     if image.ndim == 2:
@@ -31,3 +37,17 @@ def resize_for_ocr(image: np.ndarray, target_width: int = 1600) -> np.ndarray:
     scale = target_width / width
     new_height = int(height * scale)
     return cv2.resize(image, (target_width, new_height), interpolation=cv2.INTER_CUBIC)
+
+
+def crop_data_page(
+    image: np.ndarray,
+    top_ratio: float = DATA_PAGE_CROP_RATIO,
+    aspect_threshold: float = DATA_PAGE_ASPECT_THRESHOLD,
+    min_height: int = DATA_PAGE_MIN_HEIGHT,
+) -> np.ndarray:
+    height, width = image.shape[:2]
+    if height < min_height or height / width < aspect_threshold:
+        return image
+
+    crop_start = int(height * top_ratio)
+    return image[crop_start:, :]

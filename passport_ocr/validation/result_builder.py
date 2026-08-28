@@ -39,7 +39,7 @@ def build_result(
     return RecognitionResult(
         success=success,
         document_type="passport",
-        data=data if success else None,
+        data=data,
         warnings=warnings,
     )
 
@@ -86,7 +86,7 @@ def _is_passport_document(
     mrz_result: MRZParseResult | None,
     data: PassportData,
 ) -> bool:
-    if mrz_result and mrz_result.lines:
+    if mrz_result and mrz_result.is_valid:
         return mrz_result.is_passport
 
     passport_indicators = sum(

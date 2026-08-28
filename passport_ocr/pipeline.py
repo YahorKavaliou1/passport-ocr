@@ -24,13 +24,12 @@ class PassportOCRPipeline:
             image = image_ops.denoise(image)
             image = deskew.deskew(image)
             image = image_ops.enhance_contrast(image)
+            image = image_ops.crop_data_page(image)
 
             mrz_image = image
 
-            image = image_ops.binarize(image)
-            image = image_ops.resize_for_ocr(image)
-
-            ocr_result = self.ocr_engine.recognize(image)
+            ocr_image = image_ops.resize_for_ocr(image)
+            ocr_result = self.ocr_engine.recognize(ocr_image)
             mrz_result = parse_mrz(
                 mrz_image, self.ocr_engine, ocr_result.full_text
             )
@@ -40,12 +39,12 @@ class PassportOCRPipeline:
                 extraction.data, ocr_result, mrz_result, extraction.warnings
             )
 
-        except ImageLoadError:
+        except ImageLoadError as exc:
             return RecognitionResult(
                 success=False,
                 document_type="unknown",
                 data=None,
-                warnings=["The document could not be recognized"],
+                warnings=[str(exc)],
             )
 
         except ImageQualityError as exc:

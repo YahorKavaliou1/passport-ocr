@@ -13,6 +13,34 @@ TD3_LINE_LENGTH = 44
 MRZ_CROP_RATIO = 0.20
 MRZ_CHARSET = re.compile(r"^[A-Z0-9<]+$")
 
+_CYRILLIC_TO_LATIN = {
+    "А": "A",
+    "В": "B",
+    "С": "C",
+    "Е": "E",
+    "Н": "H",
+    "К": "K",
+    "М": "M",
+    "О": "O",
+    "Р": "P",
+    "Т": "T",
+    "У": "Y",
+    "Х": "X",
+    "З": "Z",
+    "І": "I",
+    "Ё": "E",
+    "Ї": "I",
+    "Ў": "Y",
+}
+
+_LINE1_PREFIX_FIXES = (
+    ("PSBLR", "P<BLR"),
+    ("PKBLR", "P<BLR"),
+    ("P<BLR", "P<BLR"),
+    ("PSBL", "P<BL"),
+    ("PKBL", "P<KB"),
+)
+
 _AMBIGUOUS_SUBSTITUTIONS = {
     "O": "0",
     "0": "O",
@@ -50,6 +78,7 @@ def parse_mrz(
 
     if len(lines) < 2 and full_text:
         text_lines = extract_mrz_from_text(full_text)
+        text_lines = _select_td3_line_pair(text_lines)
         if len(text_lines) >= 2:
             lines = text_lines[-2:]
             warnings.append("MRZ extracted from full-page OCR text")
@@ -79,9 +108,23 @@ def detect_mrz_lines(image: np.ndarray, ocr_engine: BaseOCREngine) -> list[str]:
 
 
 def extract_mrz_from_text(text: str) -> list[str]:
-    lines: list[str] = []
+    text = _normalize_mrz_ocr_text(text)
+    clean_text = re.sub(r"[^A-Z0-9<]", "", text.upper())
 
-    for raw_line in text.upper().splitlines():
+    line1_match = re.search(r"P<?BLR([A-Z]+)<<([A-Z]+)", clean_text)
+    line2_match = re.search(
+        r"([A-Z]{2}\d{7}\d[A-Z0-9<]{3}\d{6}\d[MF<]\d{6}\d[A-Z0-9<]{14}\d)",
+        clean_text,
+    )
+
+    if line1_match and line2_match:
+        line1 = _build_mrz_line1(line1_match.group(1), line1_match.group(2))
+        line2 = normalize_mrz_line(line2_match.group(1))
+        if _validate_td3_lines(line1, line2):
+            return [line1, line2]
+
+    lines: list[str] = []
+    for raw_line in text.splitlines():
         line = re.sub(r"[^A-Z0-9<]", "", raw_line)
         if len(line) == TD3_LINE_LENGTH and MRZ_CHARSET.match(line):
             lines.append(line)
@@ -93,14 +136,80 @@ def extract_mrz_from_text(text: str) -> list[str]:
                 if MRZ_CHARSET.match(candidate):
                     lines.append(candidate)
 
-    return lines
+    return _select_td3_line_pair(lines)
+
+
+def _build_mrz_line1(surname: str, given_name: str) -> str:
+    surname = re.sub(r"[^A-Z]", "", surname)
+    given_name = re.sub(r"[^A-Z]", "", given_name)
+    names = f"{surname}<<{given_name}"
+    rebuilt = f"P<BLR{names}"
+    if len(rebuilt) >= TD3_LINE_LENGTH:
+        return rebuilt[:TD3_LINE_LENGTH]
+    return rebuilt + ("<" * (TD3_LINE_LENGTH - len(rebuilt)))
+
+
+def _normalize_mrz_ocr_text(text: str) -> str:
+    normalized_chars: list[str] = []
+    for char in text.upper():
+        if char in _CYRILLIC_TO_LATIN:
+            normalized_chars.append(_CYRILLIC_TO_LATIN[char])
+        else:
+            normalized_chars.append(char)
+    return "".join(normalized_chars)
+
+
+def _select_td3_line_pair(lines: list[str]) -> list[str]:
+    line1_candidates = [normalize_mrz_line(line) for line in lines if line.startswith("P")]
+    line2_candidates = [
+        normalize_mrz_line(line)
+        for line in lines
+        if not line.startswith("P") and re.match(r"^[A-Z]{2}", line)
+    ]
+
+    for line1 in reversed(line1_candidates):
+        for line2 in reversed(line2_candidates):
+            if _validate_td3_lines(line1, line2):
+                return [line1, line2]
+
+    if line1_candidates and line2_candidates:
+        return []
+
+    return []
 
 
 def normalize_mrz_line(line: str) -> str:
-    normalized = re.sub(r"[^A-Z0-9<]", "", line.upper())
+    normalized = _normalize_mrz_ocr_text(line)
+    normalized = re.sub(r"[^A-Z0-9<]", "", normalized)
+
+    for wrong_prefix, right_prefix in _LINE1_PREFIX_FIXES:
+        if normalized.startswith(wrong_prefix):
+            normalized = right_prefix + normalized[len(wrong_prefix) :]
+            break
+
+    if normalized.startswith("P") and "<<" in normalized:
+        normalized = _rebuild_mrz_line1(normalized)
+
+    if len(normalized) >= 13 and normalized[10:13] in {"8LR", "BL8", "B8R"}:
+        normalized = normalized[:10] + "BLR" + normalized[13:]
+
     if len(normalized) < TD3_LINE_LENGTH:
         normalized = normalized.ljust(TD3_LINE_LENGTH, "<")
     return normalized[:TD3_LINE_LENGTH]
+
+
+def _rebuild_mrz_line1(line: str) -> str:
+    match = re.match(r"^P<?BLR([A-Z]+)<<([A-Z]+)", line)
+    if not match:
+        return line
+
+    surname, given_name = match.groups()
+    names = f"{surname}<<{given_name}"
+    rebuilt = f"P<BLR{names}"
+    if len(rebuilt) >= TD3_LINE_LENGTH:
+        return rebuilt[:TD3_LINE_LENGTH]
+
+    return rebuilt + ("<" * (TD3_LINE_LENGTH - len(rebuilt)))
 
 
 def correct_mrz_lines(line1: str, line2: str) -> tuple[str, str, list[str]]:

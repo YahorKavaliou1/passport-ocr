@@ -2,13 +2,18 @@ import numpy as np
 import pytesseract
 from pytesseract import Output
 
-from passport_ocr.config import OCR_LANGUAGES
+from passport_ocr.config import MIN_OCR_MEAN_CONFIDENCE, OCR_LANGUAGES
 from passport_ocr.exceptions import OCRFailureError
 from passport_ocr.ocr.engine import BaseOCREngine, OCRResult, OCRWordResult
 
-_MIN_MEAN_CONFIDENCE = 30.0
-_TESSERACT_CONFIG = "--psm 6"
+_MIN_MEAN_CONFIDENCE = MIN_OCR_MEAN_CONFIDENCE
+_TESSERACT_CONFIG = "--psm 4"
 MRZ_TESSERACT_CONFIG = "--psm 7 -c tessedit_char_whitelist=ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789<"
+
+_OCR_STRATEGIES = (
+    ("eng", "--psm 4"),
+    (OCR_LANGUAGES, "--psm 6"),
+)
 
 
 class TesseractOCREngine(BaseOCREngine):
@@ -20,25 +25,35 @@ class TesseractOCREngine(BaseOCREngine):
         if image is None or image.size == 0:
             raise OCRFailureError("OCR could not recognize the text")
 
-        full_text = pytesseract.image_to_string(
-            image, lang=self.languages, config=self.config
-        ).strip()
+        merged_text_parts: list[str] = []
+        all_words: list[OCRWordResult] = []
 
+        for languages, config in _OCR_STRATEGIES:
+            text, words = self._run_ocr(image, languages, config)
+            if text:
+                merged_text_parts.append(text)
+            all_words.extend(words)
+
+        full_text = "\n".join(merged_text_parts).strip()
         if not full_text:
             raise OCRFailureError("OCR could not recognize the text")
 
-        words = self._extract_words(image)
-
-        if words:
-            mean_confidence = sum(word.confidence for word in words) / len(words)
+        if all_words:
+            mean_confidence = sum(word.confidence for word in all_words) / len(all_words)
             if mean_confidence < _MIN_MEAN_CONFIDENCE:
                 raise OCRFailureError("OCR confidence is too low")
 
-        return OCRResult(full_text=full_text, words=words)
+        return OCRResult(full_text=full_text, words=all_words)
 
-    def _extract_words(self, image: np.ndarray) -> list[OCRWordResult]:
+    def _run_ocr(
+        self, image: np.ndarray, languages: str, config: str
+    ) -> tuple[str, list[OCRWordResult]]:
+        full_text = pytesseract.image_to_string(
+            image, lang=languages, config=config
+        ).strip()
+
         data = pytesseract.image_to_data(
-            image, lang=self.languages, config=self.config, output_type=Output.DICT,
+            image, lang=languages, config=config, output_type=Output.DICT
         )
 
         words: list[OCRWordResult] = []
@@ -53,4 +68,4 @@ class TesseractOCREngine(BaseOCREngine):
 
             words.append(OCRWordResult(text=text, confidence=confidence))
 
-        return words
+        return full_text, words
