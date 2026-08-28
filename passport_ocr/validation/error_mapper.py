@@ -8,7 +8,10 @@ from passport_ocr.models import RecognitionResult
 
 
 class PipelineErrorMapper:
+    # Converts pipeline exceptions into failure JSON responses.
+
     def to_result(self, exc: Exception) -> RecognitionResult:
+        # Map a raised exception to a consistent failure RecognitionResult.
         if isinstance(exc, ImageLoadError):
             return self._failure(str(exc))
         if isinstance(exc, ImageQualityError):

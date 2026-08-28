@@ -6,6 +6,8 @@ from passport_ocr.ocr.engine import OCRResult
 
 
 class ResultValidator(BaseResultValidator):
+    # Builds the final API response and applies passport validation rules.
+
     def build(
         self,
         data: PassportData,
@@ -13,6 +15,7 @@ class ResultValidator(BaseResultValidator):
         mrz_result: MRZParseResult | None,
         extraction_warnings: list[str] | None = None,
     ) -> RecognitionResult:
+        # Decide success or failure and attach validation warnings.
         warnings = _dedupe_warnings(list(extraction_warnings or []))
 
         warnings.extend(_check_ocr_confidence(ocr_result))
@@ -48,6 +51,7 @@ def build_result(
     mrz_result: MRZParseResult | None,
     extraction_warnings: list[str] | None = None,
 ) -> RecognitionResult:
+    # Convenience wrapper around ResultValidator.build.
     return ResultValidator().build(data, ocr_result, mrz_result, extraction_warnings)
 
 

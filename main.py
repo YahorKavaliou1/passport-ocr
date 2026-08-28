@@ -4,6 +4,7 @@ from passport_ocr.factory import create_pipeline
 
 
 def parse_args() -> argparse.Namespace:
+    # Parse CLI arguments for input image path and optional output file.
     parser = argparse.ArgumentParser(description="Pass image processor")
     parser.add_argument("--input", required=True, help="Path to the pass image")
     parser.add_argument("--output", required=False, help="Path to the output JSON")
@@ -11,6 +12,7 @@ def parse_args() -> argparse.Namespace:
 
 
 def main() -> None:
+    # Run the pipeline on the input image and print or save the JSON result.
     args = parse_args()
 
     pipeline = create_pipeline()

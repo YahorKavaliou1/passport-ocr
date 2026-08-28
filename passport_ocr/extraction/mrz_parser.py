@@ -56,6 +56,8 @@ _WEIGHTS = (7, 3, 1)
 
 @dataclass
 class MRZParseResult:
+    # Parsed and validated MRZ fields from a TD3 passport zone.
+
     is_valid: bool = False
     is_passport: bool = False
     lines: list[str] = field(default_factory=list)
@@ -73,6 +75,7 @@ class MRZParseResult:
 def parse_mrz(
     image: np.ndarray, ocr_engine: BaseOCREngine, full_text: str | None = None
 ) -> MRZParseResult:
+    # Detect MRZ lines, normalize them, and parse into passport fields.
     warnings: list[str] = []
 
     lines = detect_mrz_lines(image, ocr_engine)
@@ -97,6 +100,7 @@ def parse_mrz(
 
 
 def detect_mrz_lines(image: np.ndarray, ocr_engine: BaseOCREngine) -> list[str]:
+    # OCR the bottom strip of the image to find MRZ text lines.
     height = image.shape[0]
     crop_start = int(height * (1 - MRZ_CROP_RATIO))
     mrz_region = image[crop_start:, :]
@@ -109,6 +113,7 @@ def detect_mrz_lines(image: np.ndarray, ocr_engine: BaseOCREngine) -> list[str]:
 
 
 def extract_mrz_from_text(text: str) -> list[str]:
+    # Pull valid 44-char TD3 MRZ lines out of raw OCR text.
     text = _normalize_mrz_ocr_text(text)
     clean_text = re.sub(r"[^A-Z0-9<]", "", text.upper())
 
@@ -180,6 +185,7 @@ def _select_td3_line_pair(lines: list[str]) -> list[str]:
 
 
 def normalize_mrz_line(line: str) -> str:
+    # Clean OCR noise and pad a raw line to the standard 44-char MRZ length.
     normalized = _normalize_mrz_ocr_text(line)
     normalized = re.sub(r"[^A-Z0-9<]", "", normalized)
 
@@ -214,6 +220,7 @@ def _rebuild_mrz_line1(line: str) -> str:
 
 
 def correct_mrz_lines(line1: str, line2: str) -> tuple[str, str, list[str]]:
+    # Fix common OCR ambiguities (O/0, I/1) and re-validate check digits.
     warnings: list[str] = []
 
     if _validate_td3_lines(line1, line2):
@@ -231,6 +238,7 @@ def correct_mrz_lines(line1: str, line2: str) -> tuple[str, str, list[str]]:
 
 
 def parse_td3(line1: str, line2: str, warnings: list[str] | None = None) -> MRZParseResult:
+    # Decode TD3 line1/line2 into names, dates, and document identifiers.
     result_warnings = list(warnings or [])
     is_passport = line1.startswith("P")
     is_valid = _validate_td3_lines(line1, line2)
@@ -284,6 +292,7 @@ def _validate_td3_lines(line1: str, line2: str) -> bool:
 
 
 def validate_check_digit(data: str, check: str) -> bool:
+    # Verify an MRZ field against its ICAO check digit.
     if check == "<":
         return True
     if not check.isdigit():
@@ -292,6 +301,7 @@ def validate_check_digit(data: str, check: str) -> bool:
 
 
 def compute_check_digit(data: str) -> str:
+    # Calculate the ICAO 7-3-1 weighted check digit for an MRZ field.
     total = sum(_char_value(char) * _WEIGHTS[index % 3] for index, char in enumerate(data))
     return str(total % 10)
 
@@ -364,7 +374,10 @@ def _apply_ocr_corrections(line1: str, line2: str) -> tuple[str, str]:
 
 
 class MRZParser(BaseMRZParser):
+    # Thin adapter that delegates MRZ parsing to the parse_mrz function.
+
     def parse(
         self, image: np.ndarray, ocr_engine: BaseOCREngine, full_text: str | None = None
     ) -> MRZParseResult:
+        # Run full MRZ detection and TD3 parsing on the given image.
         return parse_mrz(image, ocr_engine, full_text)

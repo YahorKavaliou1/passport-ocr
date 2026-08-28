@@ -10,7 +10,10 @@ SUPPORTED_EXTENSIONS = {".jpg", ".jpeg", ".png", ".bmp", ".tiff"}
 
 
 class ImageLoader(BaseImageLoader):
+    # Loads passport images from supported file formats.
+
     def load(self, path: str) -> np.ndarray:
+        # Read an image file and return it as a BGR numpy array.
         if not os.path.exists(path):
             raise ImageLoadError(f"File not found: {path}")
 
@@ -29,4 +32,5 @@ class ImageLoader(BaseImageLoader):
 
 
 def load_image(path: str) -> np.ndarray:
+    # Convenience wrapper around ImageLoader.load.
     return ImageLoader().load(path)

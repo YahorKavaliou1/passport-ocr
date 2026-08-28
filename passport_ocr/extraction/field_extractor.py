@@ -11,14 +11,19 @@ from passport_ocr.models import PassportData
 
 @dataclass
 class FieldExtractionResult:
+    # Merged passport fields plus any extraction warnings.
+
     data: PassportData
     warnings: list[str] = field(default_factory=list)
 
 
 class FieldExtractor(BaseFieldExtractor):
+    # Merges visual OCR labels with MRZ data into structured passport fields.
+
     def extract(
         self, full_text: str, mrz_result: MRZParseResult | None = None
     ) -> FieldExtractionResult:
+        # Prefer MRZ for core fields; fall back to visual OCR when MRZ is unreliable.
         warnings: list[str] = []
         visual_fields = _extract_visual_fields(full_text, warnings)
 
@@ -74,6 +79,7 @@ class FieldExtractor(BaseFieldExtractor):
 def extract_fields(
     full_text: str, mrz_result: MRZParseResult | None = None
 ) -> FieldExtractionResult:
+    # Convenience wrapper around FieldExtractor.extract.
     return FieldExtractor().extract(full_text, mrz_result)
 
 

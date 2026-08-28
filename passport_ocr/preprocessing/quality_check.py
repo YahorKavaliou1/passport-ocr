@@ -10,6 +10,8 @@ from passport_ocr.interfaces import BaseQualityChecker
 
 @dataclass
 class QualityReport:
+    # Outcome of an image sharpness and brightness assessment.
+
     sharpness_score: float
     brightness: float
     is_acceptable: bool
@@ -17,7 +19,10 @@ class QualityReport:
 
 
 class QualityChecker(BaseQualityChecker):
+    # Checks whether an image is sharp and lit well enough for OCR.
+
     def assess(self, image: np.ndarray) -> QualityReport:
+        # Measure sharpness and brightness without raising an error.
         gray = self._to_grayscale(image)
 
         laplacian = cv2.Laplacian(gray, cv2.CV_64F)
@@ -37,6 +42,7 @@ class QualityChecker(BaseQualityChecker):
         return QualityReport(sharpness_score, brightness, True)
 
     def assert_acceptable(self, image: np.ndarray) -> QualityReport:
+        # Reject the image when quality falls below configured thresholds.
         report = self.assess(image)
         if not report.is_acceptable:
             raise ImageQualityError(report.reason or "Poor image quality")
@@ -51,8 +57,10 @@ class QualityChecker(BaseQualityChecker):
 
 
 def assess_quality(image: np.ndarray) -> QualityReport:
+    # Convenience wrapper around QualityChecker.assess.
     return QualityChecker().assess(image)
 
 
 def assert_acceptable_quality(image: np.ndarray) -> QualityReport:
+    # Convenience wrapper around QualityChecker.assert_acceptable.
     return QualityChecker().assert_acceptable(image)

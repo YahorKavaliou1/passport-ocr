@@ -19,6 +19,8 @@ from passport_ocr.validation.result_builder import ResultValidator
 
 
 class PassportOCRPipeline:
+    # Facade that orchestrates the full passport recognition workflow.
+
     def __init__(
         self,
         loader: BaseImageLoader | None = None,
@@ -30,6 +32,7 @@ class PassportOCRPipeline:
         result_validator: BaseResultValidator | None = None,
         error_mapper: PipelineErrorMapper | None = None,
     ) -> None:
+        # Wire pipeline dependencies, using defaults when none are provided.
         self._loader = loader or ImageLoader()
         self._quality_checker = quality_checker or QualityChecker()
         self._preprocessor = preprocessor or ImagePreprocessor()
@@ -40,6 +43,7 @@ class PassportOCRPipeline:
         self._error_mapper = error_mapper or PipelineErrorMapper()
 
     def run(self, image_path: str) -> RecognitionResult:
+        # Run all pipeline stages and return a JSON-serializable result.
         try:
             image = self._loader.load(image_path)
             self._quality_checker.assert_acceptable(image)

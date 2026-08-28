@@ -3,6 +3,7 @@ import numpy as np
 
 
 def detect_skew_angle(image: np.ndarray) -> float:
+    # Estimate the document rotation angle using min-area rectangle on text pixels.
     gray = image if image.ndim == 2 else cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
 
     blurred = cv2.GaussianBlur(gray, (5, 5), 0)
@@ -23,6 +24,7 @@ def detect_skew_angle(image: np.ndarray) -> float:
 
 
 def deskew(image: np.ndarray) -> np.ndarray:
+    # Rotate the image to correct small skew angles detected in the scan.
     angle = detect_skew_angle(image)
     if abs(angle) < 0.5:
         return image

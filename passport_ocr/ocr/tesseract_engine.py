@@ -17,11 +17,15 @@ _OCR_STRATEGIES = (
 
 
 class TesseractOCREngine(BaseOCREngine):
+    # Tesseract-based OCR using dual language/PSM strategies for better coverage.
+
     def __init__(self, languages: str = OCR_LANGUAGES, config: str = _TESSERACT_CONFIG) -> None:
+        # Store default language pack and Tesseract config for OCR runs.
         self.languages = languages
         self.config = config
 
     def recognize(self, image: np.ndarray) -> OCRResult:
+        # Run dual OCR passes and merge text; fail if confidence is too low.
         if image is None or image.size == 0:
             raise OCRFailureError("OCR could not recognize the text")
 

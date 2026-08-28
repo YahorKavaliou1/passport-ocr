@@ -10,6 +10,7 @@ from passport_ocr.validation.result_builder import ResultValidator
 
 
 def create_pipeline() -> PassportOCRPipeline:
+    # Build a pipeline with the default production dependencies.
     return PassportOCRPipeline(
         loader=ImageLoader(),
         quality_checker=QualityChecker(),
