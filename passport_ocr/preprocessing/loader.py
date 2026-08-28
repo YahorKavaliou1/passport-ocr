@@ -1,5 +1,6 @@
 import os
 
+import cv2
 import numpy as np
 
 from passport_ocr.exceptions import ImageLoadError
@@ -15,5 +16,11 @@ def load_image(path: str) -> np.ndarray:
     if ext not in SUPPORTED_EXTENSIONS:
         raise ImageLoadError(f"Unsupported file format: {ext}")
 
-    image = np.zeros((100, 100, 3), dtype=np.uint8)
+    image = cv2.imread(path, cv2.IMREAD_COLOR)
+    if image is None:
+        raise ImageLoadError(f"Could not decode image: {path}")
+
+    if image.size == 0:
+        raise ImageLoadError(f"Image is empty: {path}")
+
     return image
