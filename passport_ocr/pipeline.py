@@ -1,4 +1,5 @@
 from passport_ocr.extraction.field_extractor import extract_fields
+from passport_ocr.extraction.mrz_parser import parse_mrz
 from passport_ocr.models import RecognitionResult
 from passport_ocr.ocr.tesseract_engine import TesseractOCREngine
 from passport_ocr.preprocessing import deskew, image_ops
@@ -19,13 +20,16 @@ class PassportOCRPipeline:
             image = image_ops.to_grayscale(image)
             image = image_ops.denoise(image)
             image = deskew.deskew(image)
+            image = image_ops.enhance_contrast(image)
+            mrz_image = image
             image = image_ops.binarize(image)
             image = image_ops.resize_for_ocr(image)
 
             ocr_result = self.ocr_engine.recognize(image)
-            data = extract_fields(ocr_result.full_text)
+            mrz_result = parse_mrz(mrz_image, self.ocr_engine, ocr_result.full_text)
+            data = extract_fields(ocr_result.full_text, mrz_result)
 
-            return build_result(data, ocr_result)
+            return build_result(data, ocr_result, mrz_result)
 
         except Exception:
             # TODO: make correct handling
