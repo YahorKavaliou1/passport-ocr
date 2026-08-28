@@ -1,7 +1,45 @@
 from passport_ocr.config import OCR_CONFIDENCE_WARNING_THRESHOLD, REQUIRED_FIELDS
 from passport_ocr.extraction.mrz_parser import MRZParseResult
+from passport_ocr.interfaces import BaseResultValidator
 from passport_ocr.models import PassportData, RecognitionResult
 from passport_ocr.ocr.engine import OCRResult
+
+
+class ResultValidator(BaseResultValidator):
+    def build(
+        self,
+        data: PassportData,
+        ocr_result: OCRResult,
+        mrz_result: MRZParseResult | None,
+        extraction_warnings: list[str] | None = None,
+    ) -> RecognitionResult:
+        warnings = _dedupe_warnings(list(extraction_warnings or []))
+
+        warnings.extend(_check_ocr_confidence(ocr_result))
+        warnings.extend(_check_mrz(mrz_result))
+        warnings.extend(_check_required_fields(data))
+        warnings = _dedupe_warnings(warnings)
+
+        if not _is_passport_document(mrz_result, data):
+            return RecognitionResult(
+                success=False,
+                document_type="unknown",
+                data=None,
+                warnings=_dedupe_warnings(
+                    [*warnings, "The document could not be recognized as a passport"]
+                ),
+            )
+
+        missing_required = [
+            field_name
+            for field_name in REQUIRED_FIELDS
+            if getattr(data, field_name) is None
+        ]
+        success = len(missing_required) == 0
+
+        return RecognitionResult(
+            success=success, document_type="passport", data=data, warnings=warnings
+        )
 
 
 def build_result(
@@ -10,38 +48,7 @@ def build_result(
     mrz_result: MRZParseResult | None,
     extraction_warnings: list[str] | None = None,
 ) -> RecognitionResult:
-    warnings = _dedupe_warnings(list(extraction_warnings or []))
-
-    warnings.extend(_check_ocr_confidence(ocr_result))
-    warnings.extend(_check_mrz(mrz_result))
-    warnings.extend(_check_required_fields(data))
-    warnings = _dedupe_warnings(warnings)
-
-    is_passport = _is_passport_document(mrz_result, data)
-
-    if not is_passport:
-        return RecognitionResult(
-            success=False,
-            document_type="unknown",
-            data=None,
-            warnings=_dedupe_warnings(
-                [*warnings, "The document could not be recognized as a passport"]
-            ),
-        )
-
-    missing_required = [
-        field_name
-        for field_name in REQUIRED_FIELDS
-        if getattr(data, field_name) is None
-    ]
-    success = len(missing_required) == 0
-
-    return RecognitionResult(
-        success=success,
-        document_type="passport",
-        data=data,
-        warnings=warnings,
-    )
+    return ResultValidator().build(data, ocr_result, mrz_result, extraction_warnings)
 
 
 def _check_ocr_confidence(ocr_result: OCRResult) -> list[str]:

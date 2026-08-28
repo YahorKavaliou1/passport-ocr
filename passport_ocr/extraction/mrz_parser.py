@@ -7,6 +7,7 @@ import numpy as np
 import pytesseract
 
 from passport_ocr.ocr.engine import BaseOCREngine
+from passport_ocr.interfaces import BaseMRZParser
 from passport_ocr.ocr.tesseract_engine import MRZ_TESSERACT_CONFIG
 
 TD3_LINE_LENGTH = 44
@@ -360,3 +361,10 @@ def _apply_ocr_corrections(line1: str, line2: str) -> tuple[str, str]:
             return candidate_line1, candidate_line2
 
     return line1, line2
+
+
+class MRZParser(BaseMRZParser):
+    def parse(
+        self, image: np.ndarray, ocr_engine: BaseOCREngine, full_text: str | None = None
+    ) -> MRZParseResult:
+        return parse_mrz(image, ocr_engine, full_text)

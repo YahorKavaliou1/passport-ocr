@@ -1,6 +1,6 @@
 import argparse
 
-from passport_ocr.pipeline import PassportOCRPipeline
+from passport_ocr.factory import create_pipeline
 
 
 def parse_args() -> argparse.Namespace:
@@ -13,7 +13,7 @@ def parse_args() -> argparse.Namespace:
 def main() -> None:
     args = parse_args()
 
-    pipeline = PassportOCRPipeline()
+    pipeline = create_pipeline()
     result = pipeline.run(args.input)
 
     result_json = result.model_dump_json(indent=2)

@@ -5,6 +5,7 @@ from passport_ocr.config import (
     DATE_FIELDS, FIELD_PATTERNS, MRZ_PRIORITY_FIELDS, VISUAL_ONLY_FIELDS
 )
 from passport_ocr.extraction.mrz_parser import MRZParseResult
+from passport_ocr.interfaces import BaseFieldExtractor
 from passport_ocr.models import PassportData
 
 
@@ -14,56 +15,66 @@ class FieldExtractionResult:
     warnings: list[str] = field(default_factory=list)
 
 
+class FieldExtractor(BaseFieldExtractor):
+    def extract(
+        self, full_text: str, mrz_result: MRZParseResult | None = None
+    ) -> FieldExtractionResult:
+        warnings: list[str] = []
+        visual_fields = _extract_visual_fields(full_text, warnings)
+
+        if mrz_result:
+            warnings.extend(mrz_result.warnings)
+
+        extracted: dict[str, str | None] = {
+            field_name: None for field_name in PassportData.model_fields
+        }
+
+        for field_name in VISUAL_ONLY_FIELDS:
+            extracted[field_name] = visual_fields.get(field_name)
+
+        for field_name in MRZ_PRIORITY_FIELDS:
+            mrz_value = _get_mrz_value(mrz_result, field_name)
+            visual_value = visual_fields.get(field_name)
+
+            if mrz_result and mrz_result.is_valid and mrz_value is not None:
+                if visual_value and _is_ocr_garbled(mrz_value, visual_value, field_name):
+                    extracted[field_name] = visual_value
+                    warnings.append(
+                        f"MRZ value for '{field_name}' looked unreliable; visual value used"
+                    )
+                else:
+                    extracted[field_name] = mrz_value
+                    if visual_value and not _values_equal(
+                        mrz_value, visual_value, field_name
+                    ):
+                        warnings.append(
+                            f"Conflict between MRZ and visual text for '{field_name}'; "
+                            "MRZ value used"
+                        )
+                continue
+
+            if visual_value is not None:
+                extracted[field_name] = visual_value
+                continue
+
+            if mrz_value is not None:
+                extracted[field_name] = mrz_value
+                if mrz_result and not mrz_result.is_valid:
+                    warnings.append(f"'{field_name}' taken from unvalidated MRZ")
+
+        data = PassportData(**extracted)
+
+        for field_name in PassportData.model_fields:
+            if getattr(data, field_name) is None:
+                warnings.append(f"Field '{field_name}' could not be extracted")
+
+        return FieldExtractionResult(data=data, warnings=warnings)
+
+
 def extract_fields(
     full_text: str, mrz_result: MRZParseResult | None = None
 ) -> FieldExtractionResult:
-    warnings: list[str] = []
-    visual_fields = _extract_visual_fields(full_text, warnings)
-
-    if mrz_result:
-        warnings.extend(mrz_result.warnings)
-
-    extracted: dict[str, str | None] = {
-        field_name: None for field_name in PassportData.model_fields
-    }
-
-    for field_name in VISUAL_ONLY_FIELDS:
-        extracted[field_name] = visual_fields.get(field_name)
-
-    for field_name in MRZ_PRIORITY_FIELDS:
-        mrz_value = _get_mrz_value(mrz_result, field_name)
-        visual_value = visual_fields.get(field_name)
-
-        if mrz_result and mrz_result.is_valid and mrz_value is not None:
-            if visual_value and _is_ocr_garbled(mrz_value, visual_value, field_name):
-                extracted[field_name] = visual_value
-                warnings.append(
-                    f"MRZ value for '{field_name}' looked unreliable; visual value used"
-                )
-            else:
-                extracted[field_name] = mrz_value
-                if visual_value and not _values_equal(mrz_value, visual_value, field_name):
-                    warnings.append(
-                        f"Conflict between MRZ and visual text for '{field_name}'; MRZ value used"
-                    )
-            continue
-
-        if visual_value is not None:
-            extracted[field_name] = visual_value
-            continue
-
-        if mrz_value is not None:
-            extracted[field_name] = mrz_value
-            if mrz_result and not mrz_result.is_valid:
-                warnings.append(f"'{field_name}' taken from unvalidated MRZ")
-
-    data = PassportData(**extracted)
-
-    for field_name in PassportData.model_fields:
-        if getattr(data, field_name) is None:
-            warnings.append(f"Field '{field_name}' could not be extracted")
-
-    return FieldExtractionResult(data=data, warnings=warnings)
+    return FieldExtractor().extract(full_text, mrz_result)
 
 
 def _extract_visual_fields(full_text: str, warnings: list[str]) -> dict[str, str]:
