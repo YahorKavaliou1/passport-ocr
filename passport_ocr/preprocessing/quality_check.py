@@ -1,5 +1,6 @@
 from dataclasses import dataclass
 
+import cv2
 import numpy as np
 
 from passport_ocr.config import MAX_BRIGHTNESS, MIN_BRIGHTNESS, MIN_SHARPNESS_SCORE
@@ -14,12 +15,24 @@ class QualityReport:
     reason: str | None = None
 
 
+def _to_grayscale(image: np.ndarray) -> np.ndarray:
+    if image.ndim == 2:
+        return image
+    if image.ndim == 3 and image.shape[2] == 3:
+        return cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+    raise ImageQualityError("Unsupported image format for quality assessment")
+
+
 def assess_quality(image: np.ndarray) -> QualityReport:
-    sharpness_score = 100.0
-    brightness = 128.0
+    gray = _to_grayscale(image)
+
+    laplacian = cv2.Laplacian(gray, cv2.CV_64F)
+    sharpness_score = float(laplacian.var())
+    brightness = float(np.mean(gray))
 
     if sharpness_score < MIN_SHARPNESS_SCORE:
         return QualityReport(sharpness_score, brightness, False, "The image is too blurry")
+
     if not (MIN_BRIGHTNESS <= brightness <= MAX_BRIGHTNESS):
         return QualityReport(sharpness_score, brightness, False, "Incorrect lighting")
 
@@ -29,5 +42,5 @@ def assess_quality(image: np.ndarray) -> QualityReport:
 def assert_acceptable_quality(image: np.ndarray) -> QualityReport:
     report = assess_quality(image)
     if not report.is_acceptable:
-        raise ImageQualityError(report.reason or "Pure image quality")
+        raise ImageQualityError(report.reason or "Poor image quality")
     return report
