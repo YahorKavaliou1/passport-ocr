@@ -5,13 +5,13 @@ Extract structured data from passport images using preprocessing, OCR, MRZ parsi
 ## Requirements
 
 - Python 3.10+
-- Tesseract OCR with Russian and English language packs
+- Tesseract OCR with Belarusian, Russian, and English language packs
 
 ## Installation
 
 ```bash
 sudo apt-get update
-sudo apt-get install -y tesseract-ocr tesseract-ocr-rus tesseract-ocr-eng
+sudo apt-get install -y tesseract-ocr tesseract-ocr-bel tesseract-ocr-rus tesseract-ocr-eng
 sudo apt-get install -y build-essential python3-dev libgl1 libglib2.0-0
 
 python3 -m venv venv
@@ -58,10 +58,27 @@ On failure:
 }
 ```
 
-Missing fields are returned as `null` with warnings — values are never guessed.
+Missing fields are returned as `null` with warnings — values are never guessed. Dates use `YYYY-MM-DD`.
 
 ## Pipeline
 
 ```
 Passport image → preprocessing → OCR → MRZ parsing → field extraction → validation → JSON
 ```
+
+| Stage | Purpose |
+|-------|---------|
+| Preprocessing | Grayscale, denoise, deskew, contrast, crop data page, upscale |
+| OCR | Reads printed text (labels and values) from the passport page |
+| MRZ parsing | Reads and validates the machine-readable zone at the bottom |
+| Field extraction | Merges OCR + MRZ into 13 passport fields |
+| Validation | Checks required fields, OCR confidence, document type |
+
+## OCR and MRZ
+
+Both are used because they cover different fields:
+
+- **MRZ** — core identity data with check-digit validation (`last_name`, `first_name`, `birth_date`, `document_number`, `expiry_date`, `nationality`, `sex`, `personal_number`)
+- **OCR** — visual-zone fields not in MRZ (`middle_name`, `issue_date`, `issued_by`, `birth_place`, `citizenship`) and fallback when MRZ is missing or unreliable
+
+MRZ takes priority when valid; OCR fills gaps and visual-only fields.
