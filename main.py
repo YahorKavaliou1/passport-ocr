@@ -16,7 +16,7 @@ def main() -> None:
     pipeline = PassportOCRPipeline()
     result = pipeline.run(args.input)
 
-    result_json = result.model_dump_json(indent=2, ensure_ascii=False)
+    result_json = result.model_dump_json(indent=2)
 
     if args.output:
         with open(args.output, "w", encoding="utf-8") as f:
